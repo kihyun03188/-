@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>해양 관측 센서 데이터 수집 성공 확률 분석</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#071620; --bg-panel:#0D2431; --bg-panel2:#11303F;
+    --line:#1C3D4D; --accent:#33F2C7; --accent-dim:#1E8C79;
+    --amber:#FFB454; --text:#E7F1EF; --muted:#7FA0AC;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg-deep);color:var(--text);font-family:'Inter',sans-serif;}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px 60px;}
+  .hero{padding:64px 24px 40px;max-width:1080px;margin:0 auto;display:grid;grid-template-columns:1.1fr 0.9fr;gap:40px;align-items:center;}
+  @media (max-width:820px){.hero{grid-template-columns:1fr;} }
+  .tag{display:flex;align-items:center;gap:8px;margin-bottom:18px;font-family:'JetBrains Mono',monospace;font-size:12.5px;color:var(--muted);letter-spacing:1px;}
+  h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:42px;line-height:1.15;margin:0 0 18px;}
+  .lead{font-size:15.5px;color:var(--muted);line-height:1.7;max-width:480px;}
+  .ring-box{position:relative;width:100%;max-width:340px;aspect-ratio:1/1;margin:0 auto;}
+  .sweep{animation:sweep 5s linear infinite;transform-origin:120px 120px;}
+  @keyframes sweep{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  @keyframes pulse{0%,100%{opacity:.55;}50%{opacity:1;}}
+  .ring-label{position:absolute;bottom:6px;left:50%;transform:translateX(-50%);font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);text-align:center;}
+  .eyebrow{display:flex;align-items:center;gap:12px;margin-bottom:26px;}
+  .eyebrow .num{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--accent);border:1px solid var(--accent-dim);border-radius:999px;padding:3px 10px;}
+  .eyebrow h2{font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600;margin:0;}
+  .eyebrow .rule{flex:1;height:1px;background:var(--line);}
+  .panel{background:var(--bg-panel);border:1px solid var(--line);border-radius:14px;padding:28px 30px;margin-bottom:20px;}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 40px;}
+  @media (max-width:640px){.grid2{grid-template-columns:1fr;}}
+  .control{margin-bottom:22px;}
+  .control .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;}
+  .control .label{font-size:13px;color:var(--muted);letter-spacing:.3px;}
+  .control .val{font-family:'JetBrains Mono',monospace;font-size:15px;color:var(--accent);}
+  .control .hint{font-size:11.5px;color:#4E6C77;margin-top:5px;}
+  input[type=range]{-webkit-appearance:none;width:100%;height:4px;border-radius:999px;background:linear-gradient(90deg,var(--accent-dim),var(--line));outline:none;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg-deep);box-shadow:0 0 0 1px var(--accent-dim);}
+  input[type=range]::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;border:3px solid var(--bg-deep);}
+  .formula{margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:13.5px;color:var(--muted);background:var(--bg-panel2);padding:12px 16px;border-radius:8px;}
+  .formula .hi{color:var(--accent);}
+  .readouts{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:22px;}
+  .readout{background:var(--bg-panel2);border-radius:10px;padding:16px 18px;border:1px solid var(--line);flex:1;min-width:150px;}
+  .readout .rlabel{font-size:11.5px;color:var(--muted);margin-bottom:6px;letter-spacing:.4px;text-transform:uppercase;}
+  .readout .rval{font-family:'JetBrains Mono',monospace;font-size:22px;color:var(--accent);line-height:1.1;}
+  .readout .rval.big{font-size:30px;}
+  .readout .rsub{font-size:12px;color:#587883;margin-top:6px;}
+  .chart{width:100%;height:220px;}
+  .bar-fill{fill:var(--accent);}
+  .axis-text{fill:var(--muted);font-family:'JetBrains Mono',monospace;font-size:10px;}
+  .grid-line{stroke:var(--line);}
+  .foot{display:flex;align-items:center;gap:10px;margin-top:30px;color:#3E5C67;font-size:12.5px;}
+  .progress-track{height:8px;background:var(--bg-panel2);border-radius:999px;position:relative;overflow:hidden;margin-top:20px;}
+  .progress-fill{position:absolute;left:0;top:0;bottom:0;background:var(--accent-dim);border-radius:999px;}
+  .progress-marker{position:absolute;top:-4px;width:3px;height:16px;background:var(--amber);border-radius:2px;}
+  .progress-scale{display:flex;justify-content:space-between;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+  .tooltip-box{position:absolute;pointer-events:none;background:var(--bg-panel2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);display:none;white-space:nowrap;}
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div>
+    <div class="tag">〰 OCEAN SENSOR LINK · PROBABILITY MODEL</div>
+    <h1>신호가 수신국에 닿을 확률,<br>기하로 계산한다</h1>
+    <p class="lead">해양 관측 센서의 매 송신 시도는 독립적인 베르누이 시행입니다.
+      아래에서 거리·감쇠·신호 정렬도를 조절하면, 기하분포 → 공간 기하 →
+      지수분포(연속 확장) → 배치 최적화까지 한 번에 계산됩니다.</p>
+  </div>
+  <div class="ring-box">
+    <svg viewBox="0 0 240 240" style="width:100%;height:100%;">
+      <circle cx="120" cy="120" r="21.6" fill="none" stroke="#1C3D4D" stroke-width="1"/>
+      <circle cx="120" cy="120" r="43.2" fill="none" stroke="#1C3D4D" stroke-width="1"/>
+      <circle cx="120" cy="120" r="64.8" fill="none" stroke="#1C3D4D" stroke-width="1"/>
+      <circle cx="120" cy="120" r="86.4" fill="none" stroke="#1C3D4D" stroke-width="1"/>
+      <circle cx="120" cy="120" r="108" fill="none" stroke="#1C3D4D" stroke-width="1"/>
+      <line x1="120" y1="12" x2="120" y2="228" stroke="#1C3D4D" stroke-width="1"/>
+      <line x1="12" y1="120" x2="228" y2="120" stroke="#1C3D4D" stroke-width="1"/>
+      <g class="sweep">
+        <path d="M120 120 L120 12 A108 108 0 0 1 175 40 Z" fill="#33F2C7" opacity="0.14"/>
+      </g>
+      <circle cx="120" cy="120" r="4" fill="#33F2C7"/>
+      <circle id="dDot" cx="120" cy="60" r="6" fill="#FFB454" style="animation:pulse 1.6s ease-in-out infinite"/>
+    </svg>
+    <div class="ring-label" id="ringLabel">d = 20km · p = 0.000</div>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <!-- SECTION 1 -->
+  <div class="eyebrow"><span class="num">01</span><h2>신호 기하 — 거리·감쇠·정렬</h2><div class="rule"></div></div>
+  <div class="panel">
+    <div class="grid2">
+      <div class="control">
+        <div class="row"><span class="label">센서–수신국 거리 (d)</span><span class="val" id="v_d">20km</span></div>
+        <input type="range" id="d" min="1" max="120" step="1" value="20">
+        <div class="hint">위치벡터 차의 노름 ‖r⃗−s⃗‖</div>
+      </div>
+      <div class="control">
+        <div class="row"><span class="label">감쇠계수 (α)</span><span class="val" id="v_alpha">0.05</span></div>
+        <input type="range" id="alpha" min="0.01" max="0.15" step="0.005" value="0.05">
+        <div class="hint">매질(파도·염분)에 따른 신호 손실률</div>
+      </div>
+      <div class="control">
+        <div class="row"><span class="label">기준 성공확률 (p₀)</span><span class="val" id="v_p0">0.92</span></div>
+        <input type="range" id="p0" min="0.5" max="1" step="0.01" value="0.92">
+        <div class="hint">기준거리에서의 1회 시도 성공확률</div>
+      </div>
+      <div class="control">
+        <div class="row"><span class="label">신호 정렬도 (cosθ)</span><span class="val" id="v_cos">0.85</span></div>
+        <input type="range" id="cos" min="0" max="1" step="0.01" value="0.85">
+        <div class="hint">두 위치벡터 내적으로 구한 입사각 보정</div>
+      </div>
+    </div>
+    <div class="formula">p(d,θ) = p₀ · e^(−α·d) · cosθ &nbsp;=&nbsp; <span class="hi" id="pFormulaVal">0.0000</span></div>
+  </div>
+
+  <!-- SECTION 2 -->
+  <div class="eyebrow"><span class="num">02</span><h2>기하분포 — 첫 성공까지의 시도 횟수</h2><div class="rule"></div></div>
+  <div class="panel">
+    <div class="readouts">
+      <div class="readout"><div class="rlabel">성공확률 p</div><div class="rval big" id="r_p">0.000</div></div>
+      <div class="readout"><div class="rlabel">기댓값 E[X] = 1/p</div><div class="rval big" id="r_ex">0.00</div><div class="rsub">평균 재시도 횟수</div></div>
+    </div>
+    <div class="chart"><svg id="pmfChart" viewBox="0 0 600 220" style="width:100%;height:100%;"></svg></div>
+  </div>
+
+  <!-- SECTION 3 -->
+  <div class="eyebrow"><span class="num">03</span><h2>연속 확장 — 지수분포와 정적분</h2><div class="rule"></div></div>
+  <div class="panel">
+    <div class="control">
+      <div class="row"><span class="label">목표 시간 (T)</span><span class="val" id="v_T">3시간</span></div>
+      <input type="range" id="T" min="0.5" max="24" step="0.5" value="3">
+    </div>
+    <div class="control">
+      <div class="row"><span class="label">시간당 송신 시도 횟수</span><span class="val" id="v_att">12회/h</span></div>
+      <input type="range" id="att" min="1" max="60" step="1" value="12">
+    </div>
+    <div class="readouts">
+      <div class="readout"><div class="rlabel">비율 λ = 시도율×p</div><div class="rval" id="r_lambda">0.000</div><div class="rsub">시간당 성공률</div></div>
+      <div class="readout"><div class="rlabel">기대 대기시간 E[T]=1/λ</div><div class="rval" id="r_et">0.00h</div></div>
+      <div class="readout"><div class="rlabel"><span id="r_ptlabel">P(T ≤ 3h)</span></div><div class="rval big" id="r_pt">0.0%</div><div class="rsub">∫₀ᵀ λe^(−λt)dt</div></div>
+    </div>
+    <div class="chart" style="position:relative;"><svg id="cdfChart" viewBox="0 0 600 220" style="width:100%;height:100%;"></svg></div>
+  </div>
+
+  <!-- SECTION 4 -->
+  <div class="eyebrow"><span class="num">04</span><h2>최적화 — 목표 신뢰도를 만족하는 배치 반경</h2><div class="rule"></div></div>
+  <div class="panel">
+    <div class="control">
+      <div class="row"><span class="label">목표 신뢰도</span><span class="val" id="v_rel">0.90</span></div>
+      <input type="range" id="rel" min="0.5" max="0.99" step="0.01" value="0.9">
+      <div class="hint" id="relHint">목표 시간 3h 이내 데이터 수집 성공 확률</div>
+    </div>
+    <div class="readouts" style="margin-top:18px;">
+      <div class="readout"><div class="rlabel">최대 배치 거리 d_max</div><div class="rval big" id="r_dmax">—</div><div class="rsub" id="r_dmaxsub">계산 중</div></div>
+      <div class="readout"><div class="rlabel">현재 거리 대비</div><div class="rval" id="r_check">—</div><div class="rsub" id="r_checksub">현재 d=20km</div></div>
+    </div>
+    <div id="progressWrap" style="display:none;">
+      <div class="progress-track">
+        <div class="progress-fill" id="progFill"></div>
+        <div class="progress-marker" id="progMarker"></div>
+      </div>
+      <div class="progress-scale"><span>0km</span><span>120km</span></div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>⤳</span>
+    <span>이산 시행(기하분포) → 공간좌표 함수화 → 연속시간 확장(지수분포·정적분) → 배치 최적화 순으로 계산됩니다.</span>
+  </div>
+</div>
+
+<script>
+function clamp(v,lo,hi){return Math.min(hi,Math.max(lo,v));}
+
+const el = id => document.getElementById(id);
+const inputs = ['d','alpha','p0','cos','T','att','rel'].reduce((o,k)=>{o[k]=el(k);return o;},{});
+
+function svgNS(tag){return document.createElementNS('http://www.w3.org/2000/svg',tag);}
+
+function drawPMF(p){
+  const svg = el('pmfChart');
+  svg.innerHTML='';
+  const W=600,H=220,padL=34,padB=22,padT=8,padR=8;
+  const n=14;
+  const data = Array.from({length:n},(_,i)=>{const k=i+1;return Math.pow(1-p,k-1)*p;});
+  const maxV = Math.max(...data)*1.15;
+  const bw = (W-padL-padR)/n;
+  // grid lines
+  for(let i=0;i<=4;i++){
+    const y = padT + (H-padT-padB)*(i/4);
+    const line = svgNS('line');
+    line.setAttribute('x1',padL);line.setAttribute('x2',W-padR);
+    line.setAttribute('y1',y);line.setAttribute('y2',y);
+    line.setAttribute('class','grid-line');
+    svg.appendChild(line);
+  }
+  data.forEach((v,i)=>{
+    const h = (v/maxV)*(H-padT-padB);
+    const x = padL + i*bw + bw*0.15;
+    const y = H-padB-h;
+    const rect = svgNS('rect');
+    rect.setAttribute('x',x);rect.setAttribute('y',y);
+    rect.setAttribute('width',bw*0.7);rect.setAttribute('height',h);
+    rect.setAttribute('rx',3);
+    rect.setAttribute('class','bar-fill');
+    svg.appendChild(rect);
+    const label = svgNS('text');
+    label.setAttribute('x',x+bw*0.35);label.setAttribute('y',H-6);
+    label.setAttribute('text-anchor','middle');
+    label.setAttribute('class','axis-text');
+    label.textContent = i+1;
+    svg.appendChild(label);
+  });
+}
+
+function drawCDF(lambda,T){
+  const svg = el('cdfChart');
+  svg.innerHTML='';
+  const W=600,H=220,padL=34,padB=22,padT=8,padR=8;
+  const tMax = Math.max(T*1.6, 4/lambda, 1);
+  const n=46;
+  const pts = Array.from({length:n},(_,i)=>{
+    const t = tMax*i/(n-1);
+    return {t, p: 1-Math.exp(-lambda*t)};
+  });
+  for(let i=0;i<=4;i++){
+    const y = padT + (H-padT-padB)*(i/4);
+    const line = svgNS('line');
+    line.setAttribute('x1',padL);line.setAttribute('x2',W-padR);
+    line.setAttribute('y1',y);line.setAttribute('y2',y);
+    line.setAttribute('class','grid-line');
+    svg.appendChild(line);
+  }
+  const xScale = t => padL + (t/tMax)*(W-padL-padR);
+  const yScale = p => padT + (1-p)*(H-padT-padB);
+
+  let areaD = `M ${xScale(0)} ${yScale(0)} `;
+  pts.forEach(pt=>{ areaD += `L ${xScale(pt.t)} ${yScale(pt.p)} `; });
+  areaD += `L ${xScale(tMax)} ${H-padB} L ${xScale(0)} ${H-padB} Z`;
+
+  const defs = svgNS('defs');
+  const grad = svgNS('linearGradient');
+  grad.setAttribute('id','cdfGrad');
+  grad.setAttribute('x1','0');grad.setAttribute('y1','0');grad.setAttribute('x2','0');grad.setAttribute('y2','1');
+  const s1=svgNS('stop'); s1.setAttribute('offset','0%'); s1.setAttribute('stop-color','#33F2C7'); s1.setAttribute('stop-opacity','0.5');
+  const s2=svgNS('stop'); s2.setAttribute('offset','100%'); s2.setAttribute('stop-color','#33F2C7'); s2.setAttribute('stop-opacity','0.02');
+  grad.appendChild(s1);grad.appendChild(s2);defs.appendChild(grad);svg.appendChild(defs);
+
+  const area = svgNS('path');
+  area.setAttribute('d',areaD);
+  area.setAttribute('fill','url(#cdfGrad)');
+  svg.appendChild(area);
+
+  let lineD = `M ${xScale(0)} ${yScale(0)} `;
+  pts.forEach(pt=>{ lineD += `L ${xScale(pt.t)} ${yScale(pt.p)} `; });
+  const linePath = svgNS('path');
+  linePath.setAttribute('d',lineD);
+  linePath.setAttribute('fill','none');
+  linePath.setAttribute('stroke','#33F2C7');
+  linePath.setAttribute('stroke-width','2');
+  svg.appendChild(linePath);
+
+  if(T<=tMax){
+    const refX = xScale(T);
+    const refLine = svgNS('line');
+    refLine.setAttribute('x1',refX);refLine.setAttribute('x2',refX);
+    refLine.setAttribute('y1',padT);refLine.setAttribute('y2',H-padB);
+    refLine.setAttribute('stroke','#FFB454');
+    refLine.setAttribute('stroke-dasharray','4 4');
+    svg.appendChild(refLine);
+  }
+
+  [0,tMax/2,tMax].forEach(t=>{
+    const label = svgNS('text');
+    label.setAttribute('x',xScale(t));label.setAttribute('y',H-6);
+    label.setAttribute('text-anchor', t===0?'start':(t===tMax?'end':'middle'));
+    label.setAttribute('class','axis-text');
+    label.textContent = t.toFixed(1)+'h';
+    svg.appendChild(label);
+  });
+}
+
+function updateAll(){
+  const d = parseFloat(inputs.d.value);
+  const alpha = parseFloat(inputs.alpha.value);
+  const p0 = parseFloat(inputs.p0.value);
+  const cosT = parseFloat(inputs.cos.value);
+  const T = parseFloat(inputs.T.value);
+  const att = parseFloat(inputs.att.value);
+  const rel = parseFloat(inputs.rel.value);
+
+  el('v_d').textContent = d+'km';
+  el('v_alpha').textContent = alpha;
+  el('v_p0').textContent = p0;
+  el('v_cos').textContent = cosT;
+  el('v_T').textContent = T+'시간';
+  el('v_att').textContent = att+'회/h';
+  el('v_rel').textContent = rel.toFixed(2);
+  el('relHint').textContent = `목표 시간 ${T}h 이내 데이터 수집 성공 확률`;
+
+  const p = clamp(p0*Math.exp(-alpha*d)*cosT, 0.002, 0.999);
+  const ex = 1/p;
+  const lambda = att*p;
+  const et = 1/lambda;
+  const pt = 1-Math.exp(-lambda*T);
+
+  el('pFormulaVal').textContent = p.toFixed(4);
+  el('r_p').textContent = p.toFixed(3);
+  el('r_ex').textContent = ex.toFixed(2);
+  el('r_lambda').textContent = lambda.toFixed(3);
+  el('r_et').textContent = et.toFixed(2)+'h';
+  el('r_ptlabel').textContent = `P(T ≤ ${T}h)`;
+  el('r_pt').textContent = (pt*100).toFixed(1)+'%';
+  el('ringLabel').textContent = `d = ${d}km · p = ${p.toFixed(3)}`;
+
+  const ringR = clamp(d/120,0.04,1)*108;
+  const ang = -0.9;
+  const dx = 120+ringR*Math.cos(ang);
+  const dy = 120+ringR*Math.sin(ang);
+  el('dDot').setAttribute('cx',dx);
+  el('dDot').setAttribute('cy',dy);
+
+  drawPMF(p);
+  drawCDF(lambda,T);
+
+  const pMin = -Math.log(1-rel)/(T*att);
+  const ceiling = p0*cosT;
+  let dMax = null;
+  if(pMin>0 && pMin<ceiling){ dMax = Math.log(ceiling/pMin)/alpha; }
+
+  if(dMax!==null){
+    el('r_dmax').textContent = dMax.toFixed(1)+'km';
+    el('r_dmaxsub').textContent = '이 거리 이내에 센서를 배치하면 목표 신뢰도 충족';
+    el('r_check').textContent = d<=dMax ? '충족 ✓' : '초과 ✗';
+    el('r_checksub').textContent = `현재 d=${d}km`;
+    el('progressWrap').style.display='block';
+    el('progFill').style.width = clamp((dMax/120)*100,0,100)+'%';
+    el('progMarker').style.left = clamp((d/120)*100,0,100)+'%';
+  } else {
+    el('r_dmax').textContent = '달성 불가';
+    el('r_dmaxsub').textContent = '시도 횟수를 늘리거나 목표를 완화하세요';
+    el('r_check').textContent = '—';
+    el('progressWrap').style.display='none';
+  }
+}
+
+Object.values(inputs).forEach(inp=>inp.addEventListener('input', updateAll));
+updateAll();
+</script>
+</body>
+</html>
