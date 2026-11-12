@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>벽돌깨기</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1020;--panel:#151d34;--text:#eef3ff;--muted:#9aa8c7;--accent:#77e4d1}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at top,#1b2a4b,var(--bg) 65%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center;padding:24px}
+main{width:min(920px,100%)}header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:16px}h1{margin:0;font-size:clamp(26px,5vw,40px);letter-spacing:-1px}.sub{color:var(--muted);margin-top:5px;font-size:14px}
+.stats{display:flex;gap:10px;flex-wrap:wrap}.stat{background:#18233d;border:1px solid #2d3c5e;border-radius:12px;padding:9px 14px;min-width:82px}.stat small{display:block;color:var(--muted);font-size:11px}.stat b{font-size:20px}
+.game-wrap{position:relative;background:#0a1021;border:1px solid #344463;border-radius:18px;padding:10px;box-shadow:0 22px 70px #0008;overflow:hidden}
+canvas{display:block;width:100%;height:auto;aspect-ratio:820/520;border-radius:11px;touch-action:none;background:linear-gradient(180deg,#101a32,#0b1226)}
+.overlay{position:absolute;inset:10px;display:flex;align-items:center;justify-content:center;background:#071022bb;border-radius:11px;text-align:center;padding:20px}.overlay.hidden{display:none}.modal{max-width:390px}.modal h2{font-size:30px;margin:0 0 8px}.modal p{color:#c1cce3;line-height:1.6}
+button{border:0;border-radius:11px;background:var(--accent);color:#081522;font-weight:800;padding:12px 20px;font-size:15px;cursor:pointer}button:hover{filter:brightness(1.08)}button:focus-visible{outline:3px solid white;outline-offset:3px}
+.controls{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px}.hint{color:var(--muted);font-size:13px;line-height:1.5}.mobile{display:none;gap:8px}.mobile button{min-width:58px;background:#253653;color:white}
+@media(max-width:600px){body{padding:14px}.mobile{display:flex}.stat{min-width:68px;padding:7px 10px}.stat b{font-size:17px}}
+</style>
+</head>
+<body><main>
+<header><div><h1>🧱 벽돌깨기</h1><div class="sub">공을 튕겨 모든 벽돌을 부숴 보세요!</div></div>
+<div class="stats"><div class="stat"><small>점수</small><b id="score">0</b></div><div class="stat"><small>목숨</small><b id="lives">3</b></div><div class="stat"><small>레벨</small><b id="level">1</b></div></div></header>
+<section class="game-wrap"><canvas id="game" width="820" height="520" aria-label="벽돌깨기 게임 화면"></canvas>
+<div class="overlay" id="overlay"><div class="modal"><h2 id="headline">벽돌깨기</h2><p id="message">마우스 또는 터치로 패들을 움직이세요.<br>키보드 ← → 키로도 조작할 수 있어요.</p><button id="start">게임 시작</button></div></div>
+</section>
+<div class="controls"><div class="hint">조작: ← → / A D / 마우스 / 터치<br>공이 패들에 닿으면 튕겨 나갑니다.</div><div class="mobile"><button id="left" aria-label="왼쪽">◀</button><button id="right" aria-label="오른쪽">▶</button></div><button id="pause" style="background:#263654;color:white">일시정지</button></div>
+</main>
+<script>
+(()=>{
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=820,H=520,scoreEl=document.getElementById('score'),livesEl=document.getElementById('lives'),levelEl=document.getElementById('level'),overlay=document.getElementById('overlay'),headline=document.getElementById('headline'),message=document.getElementById('message'),startBtn=document.getElementById('start'),pauseBtn=document.getElementById('pause');
+let score=0,lives=3,level=1,running=false,paused=false,raf=0,last=0,keys={},pointerX=null,moveDir=0;
+const paddle={x:W/2-58,y:H-36,w:116,h:13,speed:8};
+const ball={x:W/2,y:H-58,r:8,vx:3.5,vy:-4.5,stuck:true};
+let bricks=[];
+const colors=['#ff6b8a','#ffad66','#f7d66b','#74d9a8','#66b9ff','#b69bff'];
+function makeBricks(){bricks=[];const rows=Math.min(4+level,7),cols=10,bw=68,bh=20,gap=10,left=(W-(cols*bw+(cols-1)*gap))/2,top=65;for(let r=0;r<rows;r++)for(let c=0;c<cols;c++)bricks.push({x:left+c*(bw+gap),y:top+r*(bh+gap),w:bw,h:bh,hp:level>2&&r%3===0?2:1,color:colors[r%colors.length],alive:true});}
+function resetBall(){ball.x=paddle.x+paddle.w/2;ball.y=paddle.y-ball.r-2;ball.vx=(Math.random()>.5?1:-1)*(3.2+level*.25);ball.vy=-(4.4+level*.25);ball.stuck=true;}
+function updateHud(){scoreEl.textContent=score;livesEl.textContent=lives;levelEl.textContent=level;}
+function show(title,msg,button='다시 시작'){headline.textContent=title;message.innerHTML=msg;startBtn.textContent=button;overlay.classList.remove('hidden');}
+function hide(){overlay.classList.add('hidden');}
+function start(){if(lives<=0){score=0;lives=3;level=1;makeBricks();updateHud()}if(bricks.length===0)makeBricks();running=true;paused=false;hide();resetBall();last=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)}
+function end(title,msg){running=false;cancelAnimationFrame(raf);show(title,msg,'다시 플레이')}
+function nextLevel(){level++;makeBricks();updateHud();resetBall();running=false;show('레벨 '+level+'!','멋져요! 다음 레벨로 이동합니다.','계속하기')}
+function draw(){ctx.clearRect(0,0,W,H);
+ctx.save();ctx.strokeStyle='#263553';ctx.lineWidth=1;for(let x=20;x<W;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke()}ctx.restore();
+for(const b of bricks){if(!b.alive)continue;ctx.fillStyle=b.color;ctx.shadowColor=b.color;ctx.shadowBlur=10;roundRect(b.x,b.y,b.w,b.h,6);ctx.fill();ctx.shadowBlur=0;if(b.hp>1){ctx.fillStyle='#17213a';ctx.fillRect(b.x+12,b.y+8,b.w-24,4)}}
+ctx.fillStyle='#eaf2ff';ctx.shadowColor='#77e4d1';ctx.shadowBlur=15;roundRect(paddle.x,paddle.y,paddle.w,paddle.h,7);ctx.fill();ctx.shadowBlur=0;
+const g=ctx.createRadialGradient(ball.x-3,ball.y-3,1,ball.x,ball.y,ball.r);g.addColorStop(0,'#fff');g.addColorStop(1,'#77e4d1');ctx.fillStyle=g;ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fill();
+}
+function roundRect(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+function update(dt){const speed=paddle.speed*dt*60;if(keys.ArrowLeft||keys.a||keys.A||moveDir<0)paddle.x-=speed;if(keys.ArrowRight||keys.d||keys.D||moveDir>0)paddle.x+=speed;if(pointerX!==null)paddle.x+=(pointerX-paddle.w/2-paddle.x)*Math.min(1,.25*dt*60);paddle.x=Math.max(8,Math.min(W-paddle.w-8,paddle.x));
+if(ball.stuck){ball.x=paddle.x+paddle.w/2;ball.y=paddle.y-ball.r-2;return}
+ball.x+=ball.vx*dt*60;ball.y+=ball.vy*dt*60;
+if(ball.x<ball.r){ball.x=ball.r;ball.vx=Math.abs(ball.vx)}if(ball.x>W-ball.r){ball.x=W-ball.r;ball.vx=-Math.abs(ball.vx)}if(ball.y<ball.r){ball.y=ball.r;ball.vy=Math.abs(ball.vy)}
+if(ball.vy>0&&ball.y+ball.r>=paddle.y&&ball.y-ball.r<=paddle.y+paddle.h&&ball.x>=paddle.x&&ball.x<=paddle.x+paddle.w){const hit=(ball.x-(paddle.x+paddle.w/2))/(paddle.w/2);ball.vx=hit*6;ball.vy=-Math.max(3.8,Math.sqrt( Math.max(12,ball.vx*ball.vx+ball.vy*ball.vy-ball.vx*ball.vx)));ball.y=paddle.y-ball.r}
+for(const b of bricks){if(!b.alive)continue;if(ball.x+ball.r>b.x&&ball.x-ball.r<b.x+b.w&&ball.y+ball.r>b.y&&ball.y-ball.r<b.y+b.h){const ox=Math.min(ball.x+ball.r-b.x,b.x+b.w-(ball.x-ball.r)),oy=Math.min(ball.y+ball.r-b.y,b.y+b.h-(ball.y-ball.r));if(ox<oy)ball.vx*=-1;else ball.vy*=-1;b.hp--;if(b.hp<=0){b.alive=false;score+=10*level;updateHud()}else score+=3;updateHud();break}}
+if(ball.y>H+ball.r){lives--;updateHud();if(lives<=0)end('게임 오버','점수: <b>'+score+'</b><br>다시 도전해 보세요!');else resetBall()}
+if(bricks.every(b=>!b.alive))nextLevel();
+}
+function loop(now){if(!running||paused)return;const dt=Math.min((now-last)/1000,.03);last=now;update(dt);draw();raf=requestAnimationFrame(loop)}
+function launch(){if(!running){start();return}if(ball.stuck)ball.stuck=false}
+startBtn.addEventListener('click',()=>{if(lives<=0){score=0;lives=3;level=1;makeBricks();updateHud()}running=true;paused=false;hide();if(ball.stuck)ball.stuck=false;last=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop)});
+pauseBtn.addEventListener('click',()=>{if(!running)return;if(paused){paused=false;pauseBtn.textContent='일시정지';last=performance.now();raf=requestAnimationFrame(loop)}else{paused=true;pauseBtn.textContent='계속하기';show('일시정지','잠시 쉬어 가세요.','계속하기')}});
+document.addEventListener('keydown',e=>{keys[e.key]=true;if(['ArrowLeft','ArrowRight',' '].includes(e.key))e.preventDefault();if(e.key===' '&&running&&!paused)launch()});
+document.addEventListener('keyup',e=>keys[e.key]=false);
+function setPointer(e){const rect=canvas.getBoundingClientRect();pointerX=(e.clientX-rect.left)/rect.width*W}
+canvas.addEventListener('pointermove',setPointer);canvas.addEventListener('pointerdown',e=>{setPointer(e);if(running&&!paused)launch()});canvas.addEventListener('pointerleave',()=>pointerX=null);
+function hold(id,dir){const el=document.getElementById(id);el.addEventListener('pointerdown',e=>{e.preventDefault();moveDir=dir});['pointerup','pointerleave','pointercancel'].forEach(ev=>el.addEventListener(ev,()=>moveDir=0))}
+hold('left',-1);hold('right',1);
+makeBricks();updateHud();draw();
+})();
+</script></body></html>
