@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#091321">
+<title>스네이크 게임</title>
+<style>
+:root{color-scheme:dark;--bg:#091321;--panel:#132238;--line:#29415b;--mint:#64e6bd;--mint2:#2dbb91;--text:#edf7f5;--muted:#9aafbd}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:22px;background:radial-gradient(ellipse at 50% -10%,#1b3850 0%,#0d1b2c 48%,var(--bg) 100%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center;align-items:center}
+main{width:min(720px,100%)}
+header{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:15px}
+h1{font-size:clamp(28px,5vw,39px);letter-spacing:-1.3px;margin:0}
+.subtitle{color:var(--muted);font-size:13px;margin-top:4px}
+.stats{display:flex;gap:8px}
+.stat{min-width:82px;padding:8px 12px;border:1px solid var(--line);background:#14243a;border-radius:12px}
+.stat small{display:block;color:var(--muted);font-size:11px}
+.stat strong{display:block;font-size:21px;font-variant-numeric:tabular-nums}
+.stage{position:relative;padding:10px;border:1px solid #2a455d;border-radius:19px;background:#0a1726;box-shadow:0 22px 65px #0008}
+canvas{display:block;width:100%;height:auto;aspect-ratio:1;max-height:min(68vh,620px);border-radius:11px;background:#0c1b2a;touch-action:none}
+.overlay{position:absolute;inset:10px;border-radius:11px;background:#06111ddd;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px}
+.overlay.hidden{display:none}
+.dialog{max-width:360px}
+.dialog .emoji{font-size:42px;margin-bottom:5px}
+.dialog h2{font-size:29px;margin:0 0 8px}
+.dialog p{color:#b4c7d1;line-height:1.65;margin:0 0 18px;font-size:14px}
+button{font:inherit;font-weight:750;border:0;border-radius:11px;padding:11px 18px;cursor:pointer;background:var(--mint);color:#062017;transition:filter .15s,transform .15s}
+button:hover{filter:brightness(1.08)}button:active{transform:scale(.97)}
+button:focus-visible{outline:3px solid white;outline-offset:3px}
+.actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:13px;flex-wrap:wrap}
+.hint{font-size:12px;line-height:1.6;color:var(--muted)}
+.secondary{background:#20364c;color:#e8f3f3}
+.pad{display:grid;grid-template-columns:repeat(3,46px);grid-template-rows:repeat(2,40px);gap:5px;touch-action:none}
+.pad button{padding:0;border-radius:10px;background:#20364c;color:#eaf8f4;font-size:18px}
+.pad .up{grid-column:2}.pad .left{grid-column:1;grid-row:2}.pad .down{grid-column:2;grid-row:2}.pad .right{grid-column:3;grid-row:2}
+@media(min-width:650px){.pad{display:none}}
+@media(max-width:520px){body{padding:13px}.stat{min-width:69px;padding:7px 9px}.stat strong{font-size:18px}.stage{padding:7px;border-radius:15px}.overlay{inset:7px}.actions{align-items:flex-start}.hint{max-width:220px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><h1>🐍 스네이크</h1><div class="subtitle">먹이를 먹고 길어지세요. 벽과 자기 몸은 조심!</div></div>
+  <div class="stats">
+    <div class="stat"><small>점수</small><strong id="score">0</strong></div>
+    <div class="stat"><small>최고 점수</small><strong id="best">0</strong></div>
+    <div class="stat"><small>속도 단계</small><strong id="stageLevel">1</strong></div>
+  </div>
+</header>
+<section class="stage">
+  <canvas id="board" width="600" height="600" aria-label="스네이크 게임 보드"></canvas>
+  <div class="overlay" id="overlay">
+    <div class="dialog">
+      <div class="emoji" id="emoji">🐍</div>
+      <h2 id="title">스네이크 게임</h2>
+      <p id="description">방향키 또는 WASD로 뱀을 움직이세요.<br>먹이를 먹을수록 뱀이 길어지고 빨라집니다!</p>
+      <button id="start">게임 시작</button>
+    </div>
+  </div>
+</section>
+<div class="actions">
+  <div class="hint">조작: 방향키 / WASD<br>모바일: 화면 스와이프 또는 방향 버튼 · Space: 일시정지</div>
+  <div class="pad" aria-label="방향 조작">
+    <button class="up" data-dir="up" aria-label="위">▲</button>
+    <button class="left" data-dir="left" aria-label="왼쪽">◀</button>
+    <button class="down" data-dir="down" aria-label="아래">▼</button>
+    <button class="right" data-dir="right" aria-label="오른쪽">▶</button>
+  </div>
+  <button class="secondary" id="pause">일시정지</button>
+</div>
+</main>
+<script>
+(()=>{
+'use strict';
+const canvas=document.getElementById('board');
+const ctx=canvas.getContext('2d');
+const N=24,CELL=canvas.width/N;
+const scoreNode=document.getElementById('score');
+const bestNode=document.getElementById('best');
+const levelNode=document.getElementById('stageLevel');
+const overlay=document.getElementById('overlay');
+const titleNode=document.getElementById('title');
+const descNode=document.getElementById('description');
+const emojiNode=document.getElementById('emoji');
+const startButton=document.getElementById('start');
+const pauseButton=document.getElementById('pause');
+let snake=[],food={x:15,y:12},direction={x:1,y:0},nextDirection={x:1,y:0};
+let score=0,best=0,tickMs=145,elapsed=0,lastTime=0,raf=0;
+let running=false,paused=false,gameOver=false;
+const directions={up:{x:0,y:-1},down:{x:0,y:1},left:{x:-1,y:0},right:{x:1,y:0}};
+try{best=Number(localStorage.getItem('snakeBest')||0)||0}catch(_){}
+bestNode.textContent=best;
+function updateHud(){scoreNode.textContent=score;bestNode.textContent=best;levelNode.textContent=String(Math.min(9,1+Math.floor(score/50)))}
+function placeFood(){
+  const free=[];
+  for(let y=0;y<N;y++)for(let x=0;x<N;x++)if(!snake.some(p=>p.x===x&&p.y===y))free.push({x,y});
+  if(!free.length){winGame();return}
+  food=free[Math.floor(Math.random()*free.length)];
+}
+function reset(){
+  snake=[{x:8,y:12},{x:7,y:12},{x:6,y:12},{x:5,y:12}];
+  direction={x:1,y:0};nextDirection={x:1,y:0};
+  score=0;tickMs=145;elapsed=0;gameOver=false;updateHud();placeFood();draw();
+}
+function showOverlay(emoji,title,description,buttonText){
+  emojiNode.textContent=emoji;titleNode.textContent=title;descNode.innerHTML=description;
+  startButton.textContent=buttonText;overlay.classList.remove('hidden');
+}
+function hideOverlay(){overlay.classList.add('hidden')}
+function begin(){
+  reset();running=true;paused=false;gameOver=false;pauseButton.textContent='일시정지';hideOverlay();
+  lastTime=performance.now();cancelAnimationFrame(raf);raf=requestAnimationFrame(loop);
+}
+function endGame(){
+  running=false;gameOver=true;cancelAnimationFrame(raf);pauseButton.textContent='일시정지';
+  showOverlay('💥','게임 오버','최종 점수는 <b>'+score+'점</b>입니다.<br>다시 도전해서 최고 기록을 세워 보세요!','다시 시작');
+}
+function winGame(){
+  running=false;cancelAnimationFrame(raf);showOverlay('🏆','완벽해요!','보드의 모든 먹이를 먹었습니다.<br>점수: <b>'+score+'점</b>','한 판 더');
+}
+function setDirection(name){
+  const d=directions[name];if(!d||!running||paused)return;
+  if(d.x===-direction.x&&d.y===-direction.y)return;
+  nextDirection=d;
+}
+function step(){
+  direction=nextDirection;
+  const head={x:snake[0].x+direction.x,y:snake[0].y+direction.y};
+  if(head.x<0||head.x>=N||head.y<0||head.y>=N){endGame();return}
+  const eating=head.x===food.x&&head.y===food.y;
+  const bodyToCheck=eating?snake:snake.slice(0,-1);
+  if(bodyToCheck.some(p=>p.x===head.x&&p.y===head.y)){endGame();return}
+  snake.unshift(head);
+  if(eating){
+    score+=10;
+    if(score>best){best=score;try{localStorage.setItem('snakeBest',String(best))}catch(_){}}
+    tickMs=Math.max(65,145-Math.floor(score/50)*9);
+    updateHud();placeFood();
+  }else snake.pop();
+}
+function roundedCell(x,y,size,color,glow){
+  const px=x*CELL+2,py=y*CELL+2,s=CELL-4;
+  ctx.fillStyle=color;
+  if(glow){ctx.shadowColor=glow;ctx.shadowBlur=11}
+  ctx.beginPath();ctx.roundRect(px,py,s,s,size);ctx.fill();ctx.shadowBlur=0;
+}
+function draw(){
+  ctx.clearRect(0,0,600,600);
+  ctx.fillStyle='#0c1b2a';ctx.fillRect(0,0,600,600);
+  ctx.strokeStyle='rgba(114,157,176,.075)';ctx.lineWidth=1;
+  for(let i=1;i<N;i++){ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,600);ctx.stroke();ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(600,i*CELL);ctx.stroke()}
+  // food
+  const fx=(food.x+.5)*CELL,fy=(food.y+.5)*CELL;
+  ctx.save();ctx.shadowColor='#ff7b8e';ctx.shadowBlur=18;ctx.fillStyle='#ff7188';ctx.beginPath();ctx.arc(fx,fy,CELL*.34,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle='#ffb2bd';ctx.beginPath();ctx.arc(fx-CELL*.09,fy-CELL*.1,CELL*.09,0,Math.PI*2);ctx.fill();ctx.restore();
+  // snake body, draw tail to head
+  for(let i=snake.length-1;i>=0;i--){
+    const p=snake[i],head=i===0;
+    const shade=head?'#8ff6d2':(i%2?'#36c99e':'#2caf8a');
+    roundedCell(p.x,p.y,head?7:5,shade,head?'#65f2c4':null);
+    if(head){
+      const cx=(p.x+.5)*CELL,cy=(p.y+.5)*CELL;
+      const perp={x:-direction.y,y:direction.x};
+      for(const side of [-1,1]){
+        const ex=cx+direction.x*4+perp.x*4*side,ey=cy+direction.y*4+perp.y*4*side;
+        ctx.fillStyle='#073023';ctx.beginPath();ctx.arc(ex,ey,2.1,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
+}
+function loop(now){
+  if(!running||paused)return;
+  const dt=Math.min(now-lastTime,100);lastTime=now;elapsed+=dt;
+  while(elapsed>=tickMs&&running){step();elapsed-=tickMs}
+  draw();
+  if(running)raf=requestAnimationFrame(loop);
+}
+function togglePause(){
+  if(!running)return;
+  if(paused){paused=false;pauseButton.textContent='일시정지';lastTime=performance.now();raf=requestAnimationFrame(loop)}
+  else{paused=true;pauseButton.textContent='계속하기';cancelAnimationFrame(raf);showOverlay('⏸️','일시정지','잠깐 쉬어 가세요. 준비되면 계속하기를 누르세요.','계속하기')}
+}
+startButton.addEventListener('click',()=>{
+  if(paused&&!gameOver){paused=false;hideOverlay();pauseButton.textContent='일시정지';lastTime=performance.now();raf=requestAnimationFrame(loop)}
+  else begin();
+});
+pauseButton.addEventListener('click',togglePause);
+const keyMap={ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right'};
+document.addEventListener('keydown',e=>{
+  if(keyMap[e.key]){e.preventDefault();setDirection(keyMap[e.key])}
+  if(e.code==='Space'){e.preventDefault();if(running)togglePause();else if(!gameOver)begin()}
+});
+document.querySelectorAll('[data-dir]').forEach(button=>{
+  button.addEventListener('pointerdown',e=>{e.preventDefault();setDirection(button.dataset.dir)});
+});
+let touchStart=null;
+canvas.addEventListener('pointerdown',e=>{touchStart={x:e.clientX,y:e.clientY}});
+canvas.addEventListener('pointerup',e=>{
+  if(!touchStart)return;
+  const dx=e.clientX-touchStart.x,dy=e.clientY-touchStart.y;
+  if(Math.max(Math.abs(dx),Math.abs(dy))>18)setDirection(Math.abs(dx)>Math.abs(dy)?(dx>0?'right':'left'):(dy>0?'down':'up'));
+  touchStart=null;
+});
+canvas.addEventListener('pointercancel',()=>touchStart=null);
+draw();updateHud();
+})();
+</script>
+</body>
+</html>
