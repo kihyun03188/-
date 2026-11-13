@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#10172d">
+<title>블록 퍼즐</title>
+<style>
+:root{color-scheme:dark;--bg:#0c1224;--panel:#17213d;--panel2:#202d4c;--line:#344568;--text:#f3f6ff;--muted:#a7b4d0;--accent:#8ee6d2}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;padding:18px;background:radial-gradient(ellipse at 50% -10%,#30446d 0%,#182541 38%,var(--bg) 82%);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center}
+main{width:min(690px,100%);padding-bottom:18px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+h1{margin:0;font-size:clamp(27px,5vw,39px);letter-spacing:-1.2px}
+.subtitle{margin-top:4px;color:var(--muted);font-size:13px}
+.stats{display:flex;gap:7px}
+.stat{min-width:76px;padding:8px 10px;border:1px solid var(--line);border-radius:12px;background:#1a2743}
+.stat small{display:block;color:var(--muted);font-size:11px}
+.stat strong{display:block;font-size:20px;font-variant-numeric:tabular-nums}
+.game-panel{padding:12px;background:#111a30;border:1px solid #344768;border-radius:19px;box-shadow:0 22px 65px #0008}
+.board-wrap{position:relative;width:min(100%,520px);margin:0 auto}
+#board{display:block;width:100%;height:auto;aspect-ratio:1;border-radius:12px;touch-action:manipulation;background:#17233c}
+.status{min-height:27px;padding:10px 4px 1px;text-align:center;color:#b8c9e2;font-size:13px}
+.tray-title{display:flex;justify-content:space-between;align-items:center;margin:15px 0 9px;color:#cbd6ed;font-weight:750;font-size:14px}
+.tray{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.piece-slot{min-width:0;min-height:112px;border:1px solid #344667;background:#1b2946;border-radius:14px;display:flex;align-items:center;justify-content:center;padding:8px;cursor:pointer;position:relative;transition:border-color .15s,background .15s,transform .15s;touch-action:manipulation}
+.piece-slot.selected{border:2px solid var(--accent);background:#233d54;box-shadow:0 0 0 2px #8ee6d222}
+.piece-slot.used{opacity:.2;cursor:default}
+.piece-slot:focus-visible{outline:3px solid white;outline-offset:3px}
+.piece-slot canvas{width:100%;height:80px;max-width:135px;object-fit:contain}
+.piece-slot .num{position:absolute;top:6px;left:8px;color:#9db0d3;font-size:10px;font-weight:700}
+.actions{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-top:14px}
+button{font:inherit;font-weight:750;border:0;border-radius:11px;padding:10px 15px;cursor:pointer;transition:filter .15s,transform .15s}
+button:hover{filter:brightness(1.1)}button:active{transform:scale(.97)}
+button:focus-visible{outline:3px solid white;outline-offset:3px}
+.secondary{background:#2a395a;color:#f0f3ff}
+.primary{background:var(--accent);color:#0a2522}
+.help{font-size:12px;line-height:1.6;color:var(--muted)}
+.overlay{position:absolute;inset:0;border-radius:12px;background:#091225e8;display:flex;align-items:center;justify-content:center;text-align:center;padding:20px}
+.overlay.hidden{display:none}
+.dialog{max-width:340px}
+.dialog .emoji{font-size:44px;margin-bottom:6px}
+.dialog h2{font-size:27px;margin:0 0 7px}
+.dialog p{color:#c1cde3;font-size:14px;line-height:1.65;margin:0 0 17px}
+.toast{position:fixed;left:50%;bottom:20px;transform:translate(-50%,20px);background:#edfdf8;color:#102c28;padding:10px 16px;border-radius:30px;font-weight:800;font-size:13px;box-shadow:0 8px 25px #0006;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:5;white-space:nowrap}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+@media(max-width:520px){
+ body{padding:11px}
+ .game-panel{padding:8px;border-radius:15px}
+ .stat{min-width:64px;padding:6px 8px}
+ .stat strong{font-size:17px}
+ .piece-slot{min-height:94px;padding:5px}
+ .piece-slot canvas{height:68px}
+ .actions{align-items:flex-start}
+}
+@media(max-width:370px){.stat{min-width:57px}.stat strong{font-size:15px}.stats{gap:4px}}
+</style>
+</head>
+<body>
+<main>
+<header>
+ <div><h1>🧩 블록 퍼즐</h1><div class="subtitle">블록을 놓고 가로줄과 세로줄을 완성하세요!</div></div>
+ <div class="stats">
+  <div class="stat"><small>점수</small><strong id="score">0</strong></div>
+  <div class="stat"><small>최고 점수</small><strong id="best">0</strong></div>
+  <div class="stat"><small>제거한 줄</small><strong id="clears">0</strong></div>
+ </div>
+</header>
+<section class="game-panel">
+ <div class="board-wrap">
+  <canvas id="board" width="480" height="480" aria-label="8 곱하기 8 블록 퍼즐 보드"></canvas>
+  <div class="overlay" id="overlay">
+   <div class="dialog">
+    <div class="emoji" id="overlayEmoji">🧩</div>
+    <h2 id="overlayTitle">블록 퍼즐</h2>
+    <p id="overlayText">아래에서 블록을 하나 선택한 뒤 보드의 빈칸을 눌러 배치하세요.<br>가로줄이나 세로줄을 완성하면 블록이 사라집니다!</p>
+    <button class="primary" id="start">게임 시작</button>
+   </div>
+  </div>
+ </div>
+ <div class="status" id="status">블록을 선택해 보드에 배치하세요.</div>
+ <div class="tray-title"><span>블록 선택</span><span id="remaining">남은 블록 3개</span></div>
+ <div class="tray" id="tray">
+  <button class="piece-slot" data-index="0" aria-label="첫 번째 블록 선택"><span class="num">1</span><canvas width="150" height="92"></canvas></button>
+  <button class="piece-slot" data-index="1" aria-label="두 번째 블록 선택"><span class="num">2</span><canvas width="150" height="92"></canvas></button>
+  <button class="piece-slot" data-index="2" aria-label="세 번째 블록 선택"><span class="num">3</span><canvas width="150" height="92"></canvas></button>
+ </div>
+ <div class="actions">
+  <div class="help">블록 선택 → 보드 칸 터치<br>공간이 부족해지면 게임이 끝나요.</div>
+  <div style="display:flex;gap:7px">
+   <button class="secondary" id="clearPick">선택 취소</button>
+   <button class="secondary" id="restart">다시 시작</button>
+  </div>
+ </div>
+</section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+(()=>{
+'use strict';
+const SIZE=8,CELL=60;
+const COLORS=['#55c8f2','#ffb15e','#a98cff','#58d6a4','#ff7696','#f1d36d','#65a7ff'];
+const SHAPES=[
+ [[1]],[[1,1]],[[1],[1]],[[1,1,1]],[[1],[1],[1]],
+ [[1,1,1,1]],[[1],[1],[1],[1]],[[1,1,1,1,1]],[[1],[1],[1],[1],[1]],
+ [[1,1],[1,1]],[[1,1,1],[1,1,1]],[[1,1],[1,1],[1,1]],
+ [[1,0],[1,0],[1,1]],[[0,1],[0,1],[1,1]],[[1,1],[1,0],[1,0]],[[1,1],[0,1],[0,1]],
+ [[1,0,0],[1,1,1]],[[0,0,1],[1,1,1]],[[1,1,1],[1,0,0]],[[1,1,1],[0,0,1]],
+ [[1,0],[1,1],[0,1]],[[0,1],[1,1],[1,0]],
+ [[1,1,1],[0,1,0]],[[0,1,0],[1,1,1]],
+ [[1,1,1,1],[0,0,1,0]],[[1,1,1],[1,0,0],[1,0,0]],
+ [[1,1,1],[0,1,0],[0,1,0]],[[1,0,0],[1,1,1],[0,0,1]],
+];
+const boardCanvas=document.getElementById('board'),ctx=boardCanvas.getContext('2d');
+const scoreEl=document.getElementById('score'),bestEl=document.getElementById('best'),clearsEl=document.getElementById('clears');
+const tray=document.getElementById('tray'),slots=[...tray.querySelectorAll('.piece-slot')];
+const overlay=document.getElementById('overlay'),statusEl=document.getElementById('status'),remainingEl=document.getElementById('remaining');
+const toastEl=document.getElementById('toast');
+let grid=[],pieces=[],selected=-1,score=0,best=0,totalClears=0,playing=false,gameEnded=false,toastTimer=0;
+try{best=Number(localStorage.getItem('blockPuzzleBest')||0)||0}catch(_){}
+bestEl.textContent=best.toLocaleString('ko-KR');
+function randShape(){return SHAPES[Math.floor(Math.random()*SHAPES.length)]}
+function copyShape(s){return s.map(row=>row.slice())}
+function newPiece(){return {shape:copyShape(randShape()),color:COLORS[Math.floor(Math.random()*COLORS.length)]}}
+function makeGrid(){return Array.from({length:SIZE},()=>Array(SIZE).fill(null))}
+function updateHud(){
+ scoreEl.textContent=score.toLocaleString('ko-KR');bestEl.textContent=best.toLocaleString('ko-KR');clearsEl.textContent=totalClears;
+ remainingEl.textContent='남은 블록 '+pieces.filter(Boolean).length+'개';
+}
+function rounded(ctx2,x,y,w,h,r){
+ ctx2.beginPath();ctx2.roundRect(x,y,w,h,r);ctx2.fill();
+}
+function drawCell(context,x,y,size,color,margin=3){
+ const px=x*size+margin,py=y*size+margin,s=size-margin*2;
+ context.fillStyle=color;rounded(context,px,py,s,s,Math.max(4,size*.13));
+ context.fillStyle='rgba(255,255,255,.22)';rounded(context,px+3,py+3,s-6,Math.max(3,s*.12),3);
+ context.fillStyle='rgba(0,0,0,.13)';rounded(context,px+3,py+s-6,s-6,3,2);
+}
+function drawBoard(hover=null){
+ ctx.clearRect(0,0,480,480);ctx.fillStyle='#17233c';ctx.fillRect(0,0,480,480);
+ for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
+  ctx.fillStyle='#22314e';rounded(ctx,x*CELL+2,y*CELL+2,CELL-4,CELL-4,7);
+  if(grid[y][x])drawCell(ctx,x,y,CELL,grid[y][x],4);
+ }
+ if(hover&&selected>=0&&pieces[selected]){
+  const p=pieces[selected],valid=canPlace(p.shape,hover.x,hover.y);
+  for(let y=0;y<p.shape.length;y++)for(let x=0;x<p.shape[y].length;x++)if(p.shape[y][x]){
+   const gx=hover.x+x,gy=hover.y+y;
+   if(gx>=0&&gy>=0&&gx<SIZE&&gy<SIZE){
+    ctx.globalAlpha=valid?.62:.38;
+    drawCell(ctx,gx,gy,CELL,valid?p.color:'#ff6178',5);
+    ctx.globalAlpha=1;
+   }
+  }
+ }
+}
+function drawPiecePreview(canvas,piece){
+ const c=canvas.getContext('2d');c.clearRect(0,0,canvas.width,canvas.height);
+ if(!piece)return;
+ const shape=piece.shape,unit=Math.min(23,Math.floor(Math.min((canvas.width-12)/shape[0].length,(canvas.height-8)/shape.length)));
+ const width=shape[0].length*unit,height=shape.length*unit;
+ const ox=(canvas.width-width)/2,oy=(canvas.height-height)/2;
+ for(let y=0;y<shape.length;y++)for(let x=0;x<shape[y].length;x++)if(shape[y][x]){
+  c.fillStyle=piece.color;
+  c.beginPath();c.roundRect(ox+x*unit+1,oy+y*unit+1,unit-2,unit-2,Math.max(3,unit*.15));c.fill();
+  c.fillStyle='rgba(255,255,255,.22)';c.fillRect(ox+x*unit+4,oy+y*unit+4,unit-8,3);
+ }
+}
+function renderTray(){
+ slots.forEach((slot,i)=>{
+  slot.classList.toggle('selected',selected===i&&!!pieces[i]);
+  slot.classList.toggle('used',!pieces[i]);
+  slot.disabled=!pieces[i]||!playing;
+  drawPiecePreview(slot.querySelector('canvas'),pieces[i]);
+ });
+ updateHud();
+}
+function canPlace(shape,ox,oy){
+ for(let y=0;y<shape.length;y++)for(let x=0;x<shape[y].length;x++)if(shape[y][x]){
+  const gx=ox+x,gy=oy+y;
+  if(gx<0||gy<0||gx>=SIZE||gy>=SIZE||grid[gy][gx])return false;
+ }
+ return true;
+}
+function fitsAnywhere(shape){
+ for(let y=0;y<=SIZE-shape.length;y++)for(let x=0;x<=SIZE-shape[0].length;x++)if(canPlace(shape,x,y))return true;
+ return false;
+}
+function showToast(text){
+ toastEl.textContent=text;toastEl.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toastEl.classList.remove('show'),1350);
+}
+function placeSelected(ox,oy){
+ if(!playing||selected<0||!pieces[selected])return;
+ const piece=pieces[selected];
+ if(!canPlace(piece.shape,ox,oy)){statusEl.textContent='그 자리에는 놓을 수 없어요. 다른 칸을 선택해 보세요.';return}
+ let placed=0;
+ for(let y=0;y<piece.shape.length;y++)for(let x=0;x<piece.shape[y].length;x++)if(piece.shape[y][x]){
+  grid[oy+y][ox+x]=piece.color;placed++;
+ }
+ score+=placed;
+ pieces[selected]=null;selected=-1;
+ const rows=[],cols=[];
+ for(let y=0;y<SIZE;y++)if(grid[y].every(Boolean))rows.push(y);
+ for(let x=0;x<SIZE;x++)if(grid.every(row=>row[x]))cols.push(x);
+ const clearedCount=rows.length+cols.length;
+ if(clearedCount){
+  for(const y of rows)for(let x=0;x<SIZE;x++)grid[y][x]=null;
+  for(const x of cols)for(let y=0;y<SIZE;y++)grid[y][x]=null;
+  // Add a small bonus for clearing multiple lines at once.
+  score+=clearedCount*10+Math.max(0,clearedCount-1)*clearedCount*5;
+  totalClears+=clearedCount;
+  showToast(clearedCount>=3?'대단해요! '+clearedCount+'줄 제거!':'줄 제거! +'+clearedCount*10);
+  statusEl.textContent=clearedCount+'개의 줄을 제거했어요! 계속 이어가세요.';
+ }else statusEl.textContent='좋아요! 다음 블록을 배치해 보세요.';
+ if(score>best){best=score;try{localStorage.setItem('blockPuzzleBest',String(best))}catch(_){}}
+ if(pieces.every(p=>p===null))pieces=[newPiece(),newPiece(),newPiece()];
+ renderTray();drawBoard();
+ if(!hasAnyMove())endGame();
+}
+function hasAnyMove(){return pieces.some(p=>p&&fitsAnywhere(p.shape))}
+function endGame(){
+ playing=false;gameEnded=true;selected=-1;renderTray();
+ $('overlayEmoji').textContent='🌟';$('overlayTitle').textContent='게임 종료!';
+ $('overlayText').innerHTML='더 이상 놓을 수 있는 블록이 없어요.<br>최종 점수: <b>'+score.toLocaleString('ko-KR')+'점</b><br>다시 도전해 최고 기록을 세워 보세요!';
+ $('start').textContent='다시 시작';overlay.classList.remove('hidden');
+ statusEl.textContent='게임이 끝났어요.';
+}
+function begin(){
+ grid=makeGrid();pieces=[newPiece(),newPiece(),newPiece()];selected=-1;score=0;totalClears=0;playing=true;gameEnded=false;
+ overlay.classList.add('hidden');statusEl.textContent='블록을 선택해 보드에 배치하세요.';
+ renderTray();drawBoard();
+}
+function pickPiece(i){
+ if(!playing||!pieces[i])return;
+ selected=selected===i?-1:i;
+ statusEl.textContent=selected>=0?'선택한 블록을 놓을 위치를 보드에서 누르세요.':'블록 선택을 취소했어요.';
+ renderTray();drawBoard();
+}
+slots.forEach((slot,i)=>slot.addEventListener('click',()=>pickPiece(i)));
+function boardPoint(e){
+ const rect=boardCanvas.getBoundingClientRect();
+ const scaleX=480/rect.width,scaleY=480/rect.height;
+ return {x:Math.floor((e.clientX-rect.left)*scaleX/CELL),y:Math.floor((e.clientY-rect.top)*scaleY/CELL)};
+}
+boardCanvas.addEventListener('pointermove',e=>{if(!playing||selected<0)return;drawBoard(boardPoint(e))});
+boardCanvas.addEventListener('pointerleave',()=>drawBoard());
+boardCanvas.addEventListener('pointerdown',e=>{
+ if(!playing||selected<0)return;
+ e.preventDefault();const point=boardPoint(e);placeSelected(point.x,point.y);
+});
+$('start').addEventListener('click',begin);
+$('restart').addEventListener('click',begin);
+$('clearPick').addEventListener('click',()=>{selected=-1;statusEl.textContent='선택을 취소했어요.';renderTray();drawBoard()});
+begin();overlay.classList.remove('hidden');
+})();
+</script>
+</body>
+</html>
